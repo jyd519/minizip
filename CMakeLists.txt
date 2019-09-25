@@ -11,7 +11,9 @@ message(STATUS "Using CMake version ${CMAKE_VERSION}")
 
 option(MZ_COMPAT "Enables compatibility layer" ON)
 option(MZ_ZLIB "Enables ZLIB compression" ON)
+option(MZ_ZLIB_STATIC "Links with ZLIB statically" ON)
 option(MZ_BZIP2 "Enables BZIP2 compression" ON)
+option(MZ_BZIP2_STATIC "Links with BZIP2 statically" ON)
 option(MZ_LZMA "Enables LZMA compression" ON)
 option(MZ_PKCRYPT "Enables PKWARE traditional encryption" ON)
 option(MZ_WZAES "Enables WinZIP AES encryption" ON)
@@ -59,7 +61,7 @@ set(MINIZIP_PC ${CMAKE_CURRENT_BINARY_DIR}/minizip.pc)
 configure_file(minizip.pc.cmakein ${MINIZIP_PC} @ONLY)
 
 # Check if zlib installation is present
-if(MZ_ZLIB AND NOT MZ_LIBCOMP)
+if((NOT MZ_ZLIB_STATIC) AND MZ_ZLIB AND NOT MZ_LIBCOMP)
     find_package(ZLIB)
     if(ZLIB_FOUND)
         message(STATUS "Using ZLIB ${ZLIB_VERSION_STRING}")
@@ -124,7 +126,7 @@ if(MZ_ZLIB AND NOT MZ_LIBCOMP)
 endif()
 
 # Check if bzip2 installation is present
-if(MZ_BZIP2)
+if(MZ_BZIP2 AND NOT MZ_ZLIB_STATIC)
     find_package(BZip2)
     if(BZIP2_FOUND)
         message(STATUS "Using BZIP2 ${BZIP2_VERSION_STRING}")
@@ -424,7 +426,7 @@ if(MZ_BZIP2)
     list(APPEND MINIZIP_SRC "mz_strm_bzip.c")
     list(APPEND MINIZIP_PUBLIC_HEADERS "mz_strm_bzip.h")
 
-    if(NOT BZIP2_FOUND)
+    if(NOT BZIP2_FOUND OR MZ_BZIP2_STATIC)
         add_definitions(-DBZ_NO_STDIO)
 
         set(BZIP2_SRC
@@ -586,7 +588,7 @@ source_group("Minizip" FILES ${MINIZIP_SRC} ${MINIZIP_PUBLIC_HEADERS})
 
 project(minizip)
 
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} STATIC
                 ${MINIZIP_SRC} ${MINIZIP_PUBLIC_HEADERS}
                 ${BRG_SRC} ${BRG_PUBLIC_HEADERS}
                 ${BZIP2_SRC} ${BZIP2_PUBLIC_HEADERS}
@@ -598,6 +600,9 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
                         LINKER_LANGUAGE C
                         DEFINE_SYMBOL "MZ_EXPORTS")
 
+# Use embeded zlib
+add_subdirectory(lib/zlib)
+
 if(NOT RISCOS)
     set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE 1)
 endif()
@@ -607,10 +612,11 @@ endif()
 
 # Link with external libraries
 if(MZ_ZLIB AND NOT MZ_LIBCOMP)
-    target_link_libraries(${PROJECT_NAME} ${ZLIB_LIBRARIES})
-    if(NOT ZLIB_FOUND)
-        add_dependencies(${PROJECT_NAME} zlib)
-    endif()
+	if(MZ_ZLIB_STATIC)
+		target_link_libraries(${PROJECT_NAME} zlibstatic)
+	else()
+        	add_dependencies(${PROJECT_NAME} zlib)
+	endif()
 endif()
 if(MZ_BZIP2 AND BZIP2_FOUND)
     target_link_libraries(${PROJECT_NAME} ${BZIP2_LIBRARIES})
@@ -641,7 +647,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:${INSTALL_
 
 # Install files
 if(NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
-    install(TARGETS ${PROJECT_NAME} EXPORT ${PROJECT_NAME}
+    install(TARGETS ${PROJECT_NAME} "zlibstatic" EXPORT ${PROJECT_NAME}
             INCLUDES DESTINATION "${INSTALL_INC_DIR}"
             RUNTIME DESTINATION "${INSTALL_BIN_DIR}"
             ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
